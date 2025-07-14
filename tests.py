@@ -1,6 +1,7 @@
 # from functions.get_files_info import get_files_info
 # from functions.get_file_content import get_file_content
-from functions.write_file import write_file
+# from functions.write_file import write_file
+from functions.run_python_file import run_python_file
 
 # get_files_info tests
 
@@ -43,13 +44,32 @@ from functions.write_file import write_file
 # Test for write_file.py
 
 # Test for 'lorem.txt' with 'wait, this isn't lorem ipsum'
-print("Result for 'lorem.txt' and 'wait, this isn't lorem ipsum'")
-print(write_file("calculator", "lorem.txt", "wait, this isn't lorem ipsum"))
+# print("Result for 'lorem.txt' and 'wait, this isn't lorem ipsum'")
+# print(write_file("calculator", "lorem.txt", "wait, this isn't lorem ipsum"))
 
 # Test for 'pkg/morelorem.txt' with 'wait, this isn't lorem ipsum'
-print("Result for 'pkg/morelorem.txt' and 'lorem ipsum dolor sit amet'")
-print(write_file("calculator", "pkg/morelorem.txt", "lorem ipsum dolor sit amet"))
+# print("Result for 'pkg/morelorem.txt' and 'lorem ipsum dolor sit amet'")
+# print(write_file("calculator", "pkg/morelorem.txt", "lorem ipsum dolor sit amet"))
 
 # Test for 'lorem.txt' with 'this should not be allowed'
-print("Result for '/tmp/temp.txt' and 'this should not be allowed'")
-print(write_file("calculator", "/tmp/temp.txt", "this should not be allowed"))
+# print("Result for '/tmp/temp.txt' and 'this should not be allowed'")
+# print(write_file("calculator", "/tmp/temp.txt", "this should not be allowed"))
+
+
+# Tests for run_python_file
+
+# Test for 'main.py' file
+print("Result for 'main.py' file")
+print(run_python_file("calculator", "main.py"))
+
+# Test for 'tests.py'
+print("Result for 'tests.py' file")
+print(run_python_file("calculator", "tests.py"))
+
+# Test for '../main.py'
+print("Result for '../main.py' file")
+print(run_python_file("calculator", "../main.py"))
+
+# Test for 'nonexistent.py'
+print("Result for 'nonexistent.py' file")
+print(run_python_file("calculator", "nonexistent.py"))
