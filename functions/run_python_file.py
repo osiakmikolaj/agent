@@ -1,6 +1,7 @@
 import os
 from functions.get_absolute_path import get_absolute_path
 import subprocess
+from google.genai import types
 
 def run_python_file(working_directory, file_path):
     try:
@@ -34,3 +35,22 @@ def run_python_file(working_directory, file_path):
         return f"Error: executing Python file: {e}"
 
     return result
+
+
+schema_run_python_file = types.FunctionDeclaration(
+    name="run_python_file",
+    description="Executes a python file from provided path, then returns the result (STDOUT and STDERR).",
+    parameters=types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "working_directory": types.Schema(
+                type=types.Type.STRING,
+                description="The path to the working directory. Later, it will be used as a base path for the absolute file path.",
+            ),
+            "file_path": types.Schema(
+                type=types.Type.STRING,
+                description="The path to the file you want to execute.",
+            )
+        },
+    ),
+)

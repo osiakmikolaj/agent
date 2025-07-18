@@ -4,6 +4,10 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 from functions.get_files_info import schema_get_files_info
+from functions.write_file import schema_write_file
+from functions.run_python_file import schema_run_python_file
+from functions.get_file_content import schema_get_file_content
+from functions.call_function import call_function
 
 # get gemini key from env
 load_dotenv()
@@ -40,13 +44,19 @@ You are a helpful AI coding agent.
 When a user asks a question or makes a request, make a function call plan. You can perform the following operations:
 
 - List files and directories
+- Read file contents
+- Execute Python files with optional arguments
+- Write or overwrite files
 
 All paths you provide should be relative to the working directory. You do not need to specify the working directory in your function calls as it is automatically injected for security reasons.
 """
 
 available_functions = types.Tool(
     function_declarations=[
-        schema_get_files_info
+        schema_get_files_info,
+        schema_write_file,
+        schema_run_python_file,
+        schema_get_file_content
     ]
 )
 
@@ -61,17 +71,40 @@ response = client.models.generate_content(
     config=config
 )
 
-# Helper function
+# Helper functions
 def get_function_call(response):
     try:
         return response.candidates[0].content.parts[0].function_call
     except (IndexError, AttributeError):
         return None
 
+def get_function_response(function_call_result):
+    if not function_call_result:
+        return None
+
+    parts = getattr(function_call_result, 'parts', None)
+    if not parts or len(parts) == 0:
+        return None
+
+    function_response_obj = getattr(parts[0], 'function_response', None)
+    if not function_response_obj:
+        return None
+
+    return getattr(function_response_obj, 'response', None)
+
 # Check for a function call
 function_call_part = get_function_call(response)
 if function_call_part:
-    print(f"Calling function: {function_call_part.name}({function_call_part.args})")
+    # Call the function
+    function_call_result = call_function(function_call_part)
+
+    function_response = get_function_response(function_call_result)
+
+    if function_response is None:
+        raise RuntimeError("call_function did not return expected types.Content structure")
+
+    if if_verbose:
+        print(f"-> {function_response}")
 else:
     print("No function call found in the response.")
     print(response.text)

@@ -1,6 +1,7 @@
 import os
 from functions.config import MAX_CHARS
 from functions.get_absolute_path import get_absolute_path
+from google.genai import types
 
 def get_file_content(working_directory, file_path):
     try:
@@ -23,3 +24,21 @@ def get_file_content(working_directory, file_path):
         return f"Error: {str(e)}"
 
     return file_content_string
+
+schema_get_file_content = types.FunctionDeclaration(
+    name="get_file_content",
+    description="Returns the content of a file as a string.",
+    parameters=types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "working_directory": types.Schema(
+                type=types.Type.STRING,
+                description="The path to the working directory. Later, it will be used as a base path for the file path.",
+            ),
+            "file_path": types.Schema(
+                type=types.Type.STRING,
+                description="The path to the file.",
+            )
+        },
+    ),
+)
