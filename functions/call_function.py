@@ -13,7 +13,7 @@ FUNCTIONS = {
     'write_file': write_file
 }
 
-def call_function(function_call_part, verbose=False):
+def call_function(function_call_part, verbose):
     if verbose:
         print(f"Calling function: {function_call_part.name}({function_call_part.args})")
     else:

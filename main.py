@@ -72,9 +72,10 @@ response = client.models.generate_content(
 )
 
 # Check if response is a function call
-if isinstance(response, types.FunctionCall):
+parts = response.candidates[0].content.parts # type: ignore
+if parts and getattr(parts[0], "function_call", None) is not None:
     # Get function response as types.Content
-    result = call_function(response)
+    result = call_function(parts[0].function_call, if_verbose)
 
     try:
         function_response = result.parts[0].function_response.response # type: ignore
