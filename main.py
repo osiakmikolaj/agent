@@ -37,7 +37,7 @@ messages = [
     types.Content(role="user", parts=[types.Part(text=user_prompt)])
 ]
 
-# Hardcoded system prompt
+# System prompt
 system_prompt = """
 You are a helpful AI coding agent.
 
@@ -71,43 +71,31 @@ response = client.models.generate_content(
     config=config
 )
 
-# Helper functions
-def get_function_call(response):
+# Check if response is a function call
+if isinstance(response, types.FunctionCall):
+    # Get function response as types.Content
+    result = call_function(response)
+
     try:
-        return response.candidates[0].content.parts[0].function_call
-    except (IndexError, AttributeError):
-        return None
-
-def get_function_response(function_call_result):
-    if not function_call_result:
-        return None
-
-    parts = getattr(function_call_result, 'parts', None)
-    if not parts or len(parts) == 0:
-        return None
-
-    function_response_obj = getattr(parts[0], 'function_response', None)
-    if not function_response_obj:
-        return None
-
-    return getattr(function_response_obj, 'response', None)
-
-# Check for a function call
-function_call_part = get_function_call(response)
-if function_call_part:
-    # Call the function
-    function_call_result = call_function(function_call_part)
-
-    function_response = get_function_response(function_call_result)
+        function_response = result.parts[0].function_response.response # type: ignore
+    except Exception as e:
+        raise Exception(f"Error: {str(e)}")
 
     if function_response is None:
-        raise RuntimeError("call_function did not return expected types.Content structure")
+        raise Exception("Fatal error occurred!")
 
     if if_verbose:
         print(f"-> {function_response}")
+
 else:
     print("No function call found in the response.")
-    print(response.text)
+    # Check if response has text attribute
+    if hasattr(response, "text"):
+        print(response.text)
+    else:
+        print(response)
+
+
 
 # only print if --verbose flag is included
 if if_verbose:
