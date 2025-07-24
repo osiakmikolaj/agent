@@ -9,11 +9,8 @@ from functions.run_python_file import schema_run_python_file
 from functions.get_file_content import schema_get_file_content
 from functions.call_function import call_function
 
-# Client will be initialized in setup_client()
-
 if_verbose = False
 
-# get user promt and optional argument from sys.argv
 if len(sys.argv) > 1:
     user_prompt = sys.argv[1]
     if len(sys.argv) > 2:
