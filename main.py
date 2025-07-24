@@ -64,43 +64,50 @@ config = types.GenerateContentConfig(
     tools=[available_functions], system_instruction=system_prompt
 )
 
-# response from the model
-response = client.models.generate_content(
+# Response from the model
+model_response = client.models.generate_content(
     model='gemini-2.0-flash-001',
     contents=messages,
     config=config
 )
 
-# Check if response is a function call
-parts = response.candidates[0].content.parts # type: ignore
+# If content exists, append it to the messages
+if model_response.candidates is not None and model_response.candidates:
+    for candidate in model_response.candidates:
+        if candidate.content is not None:
+            messages.append(candidate.content)
+
+if model_response.candidates is not None and model_response.candidates and model_response.candidates[0].content is not None and model_response.candidates[0].content.parts is not None:
+    parts = model_response.candidates[0].content.parts
+else:
+    parts = None
+
 if parts and getattr(parts[0], "function_call", None) is not None:
     # Get function response as types.Content
-    result = call_function(parts[0].function_call, if_verbose)
+    function_call_response = call_function(parts[0].function_call, if_verbose)
 
-    try:
-        function_response = result.parts[0].function_response.response # type: ignore
-    except Exception as e:
-        raise Exception(f"Error: {str(e)}")
+    if function_call_response.parts is not None and function_call_response.parts[0].function_response is not None:
+        call_output = function_call_response.parts[0].function_response.response
+    else:
+        call_output = None
 
-    if function_response is None:
+    if call_output is None:
         raise Exception("Fatal error occurred!")
 
     if if_verbose:
-        print(f"-> {function_response}")
+        print(f"-> {call_output}")
 
 else:
     print("No function call found in the response.")
     # Check if response has text attribute
-    if hasattr(response, "text"):
-        print(response.text)
+    if hasattr(model_response, "text"):
+        print(model_response.text)
     else:
-        print(response)
-
-
+        print(model_response)
 
 # only print if --verbose flag is included
 if if_verbose:
-    usage = response.usage_metadata
+    usage = model_response.usage_metadata
     prompt_tokens = getattr(usage, 'prompt_token_count', 0) if usage else 0
     completion_tokens = getattr(usage, 'completion_token_count', 0) if usage else 0
     print(f"User prompt: {user_prompt}")
