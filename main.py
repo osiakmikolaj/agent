@@ -9,11 +9,7 @@ from functions.run_python_file import schema_run_python_file
 from functions.get_file_content import schema_get_file_content
 from functions.call_function import call_function
 
-# get gemini key from env
-load_dotenv()
-api_key = os.getenv("GEMINI_API_KEY")
-
-client = genai.Client(api_key=api_key)
+# Client will be initialized in setup_client()
 
 if_verbose = False
 
@@ -32,13 +28,13 @@ else:
     print("Usage: uv run main.py <prompt> <optional argument>")
     sys.exit(1)
 
-# list of all user prompts
-messages = [
-    types.Content(role="user", parts=[types.Part(text=user_prompt)])
-]
+def setup_client():
+    """Initialize the Gemini client and configuration"""
+    load_dotenv()
+    api_key = os.getenv("GEMINI_API_KEY")
+    client = genai.Client(api_key=api_key)
 
-# System prompt
-system_prompt = """
+    system_prompt = """
 You are a helpful AI coding agent.
 
 When a user asks a question or makes a request, make a function call plan. You can perform the following operations:
@@ -51,82 +47,147 @@ When a user asks a question or makes a request, make a function call plan. You c
 All paths you provide should be relative to the working directory. You do not need to specify the working directory in your function calls as it is automatically injected for security reasons.
 """
 
-available_functions = types.Tool(
-    function_declarations=[
-        schema_get_files_info,
-        schema_write_file,
-        schema_run_python_file,
-        schema_get_file_content
-    ]
-)
+    available_functions = types.Tool(
+        function_declarations=[
+            schema_get_files_info,
+            schema_write_file,
+            schema_run_python_file,
+            schema_get_file_content
+        ]
+    )
 
-config = types.GenerateContentConfig(
-    tools=[available_functions], system_instruction=system_prompt
-)
+    config = types.GenerateContentConfig(
+        tools=[available_functions], system_instruction=system_prompt
+    )
 
+    return client, config
 
-
-# Main loop
-i = 0
-while i < 20:
-    i += 1
+def has_function_call(response):
+    """Check if the response contains a function call in any part"""
     try:
-        # Response from the model
-        model_response = client.models.generate_content(
-            model='gemini-2.0-flash-001',
-            contents=messages,
-            config=config
-        )
+        if not (response.candidates and response.candidates[0].content and response.candidates[0].content.parts):
+            return False
 
-        # If content exists, append it to the messages
-        if model_response.candidates is not None and model_response.candidates:
-            for candidate in model_response.candidates:
-                if candidate.content is not None:
-                    messages.append(candidate.content)
+        # Check all parts for function calls
+        for part in response.candidates[0].content.parts:
+            if hasattr(part, 'function_call') and part.function_call is not None:
+                return True
+        return False
+    except (IndexError, AttributeError):
+        return False
 
-        if model_response.candidates is not None and model_response.candidates and model_response.candidates[0].content is not None and model_response.candidates[0].content.parts is not None:
-            parts = model_response.candidates[0].content.parts
-        else:
-            parts = None
+def get_text_content(response):
+    """Extract text content from response"""
+    try:
+        if hasattr(response, "text") and response.text:
+            return response.text
 
-        if parts and getattr(parts[0], "function_call", None) is not None:
-            # Get function response as types.Content
-            function_call_response = call_function(parts[0].function_call, if_verbose)
+        if response.candidates and response.candidates[0].content:
+            content = response.candidates[0].content
+            if content.parts:
+                for part in content.parts:
+                    if hasattr(part, "text") and part.text:
+                        return part.text
+    except (IndexError, AttributeError):
+        pass
+    return None
 
-            messages.append(function_call_response)
-
-            if function_call_response.parts is not None and function_call_response.parts[0].function_response is not None:
-                call_output = function_call_response.parts[0].function_response.response
-            else:
-                call_output = None
-
-            if call_output is None:
-                raise Exception("Fatal error occurred!")
-
-            if if_verbose:
-                print(f"-> {call_output}")
-
-        else:
-            if hasattr(model_response, "text") and model_response.text:
-                print(model_response.text)
+def handle_function_call(response, messages, verbose):
+    """Handle function call in response"""
+    try:
+        # Find the part with the function call
+        function_call_part = None
+        for part in response.candidates[0].content.parts:
+            if hasattr(part, 'function_call') and part.function_call is not None:
+                function_call_part = part.function_call
                 break
 
-            if model_response.candidates:
-                content = model_response.candidates[0].content
-                if content and getattr(content, 'parts', None) and content.parts:
-                    for part in content.parts:
-                        text = getattr(part, "text", None)
-                        if text:
-                            print(text)
-                            break
+        if not function_call_part:
+            return False
 
-        # only print if --verbose flag is included
-        if if_verbose:
-            usage = model_response.usage_metadata
-            prompt_tokens = getattr(usage, 'prompt_token_count', 0) if usage else 0
-            completion_tokens = getattr(usage, 'completion_token_count', 0) if usage else 0
-            print(f"User prompt: {user_prompt}")
-            print(f"Prompt tokens: {prompt_tokens}")
-            print(f"Response tokens: {completion_tokens}")
+        function_call_response = call_function(function_call_part, verbose)
+
+        # Add function response to messages
+        messages.append(function_call_response)
+
+        # Extract and validate the result
+        if (function_call_response.parts and
+            function_call_response.parts[0].function_response and
+            function_call_response.parts[0].function_response.response):
+
+            call_output = function_call_response.parts[0].function_response.response
+            if verbose:
+                print(f"-> {call_output}")
+            return True  # Continue conversation
+        else:
+            raise Exception("Fatal error: Function call returned invalid response")
+
     except Exception as e:
-        print(f"Error occurred: {e}")
+        print(f"Error in function call: {e}")
+        return False
+
+def print_usage_stats(response, user_prompt, verbose):
+    """Print usage statistics if verbose mode is enabled"""
+    if verbose:
+        usage = response.usage_metadata
+        prompt_tokens = getattr(usage, 'prompt_token_count', 0) if usage else 0
+        completion_tokens = getattr(usage, 'completion_token_count', 0) if usage else 0
+        print(f"User prompt: {user_prompt}")
+        print(f"Prompt tokens: {prompt_tokens}")
+        print(f"Response tokens: {completion_tokens}")
+
+def main_conversation_loop(client, config, user_prompt, verbose):
+    """Main conversation loop with the AI"""
+    messages = [
+        types.Content(role="user", parts=[types.Part(text=user_prompt)])
+    ]
+
+    max_iterations = 20
+    for i in range(max_iterations):
+        try:
+            # Get response from model
+            response = client.models.generate_content(
+                model='gemini-2.0-flash-001',
+                contents=messages,
+                config=config
+            )
+
+            # Add response to conversation history
+            if response.candidates:
+                for candidate in response.candidates:
+                    if candidate.content:
+                        messages.append(candidate.content)
+
+            # Check for both text and function calls
+            text_content = get_text_content(response)
+            has_func_call = has_function_call(response)
+
+            # Print any text content first
+            if text_content:
+                print(text_content)
+
+            # Handle function calls if present
+            if has_func_call:
+                should_continue = handle_function_call(response, messages, verbose)
+                if not should_continue:
+                    break
+            else:
+                # No function call and we have text - this likely ends the conversation
+                if text_content:
+                    print_usage_stats(response, user_prompt, verbose)
+                    break
+                else:
+                    print("No response content found")
+                    break
+
+            # Print usage stats for this iteration if verbose (for function call iterations)
+            if verbose and has_func_call:
+                print_usage_stats(response, user_prompt, verbose)
+
+        except Exception as e:
+            print(f"Error occurred: {e}")
+            break
+
+# Initialize and run
+client, config = setup_client()
+main_conversation_loop(client, config, user_prompt, if_verbose)
